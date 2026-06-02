@@ -2,8 +2,7 @@
 
 An interactive, browser-based training tool for Back Market customer service agents. Pairs two users in real time: one plays the **Agent**, one plays the **Customer**, to practice live chat handling across realistic support scenarios.
 
-> **Live demo:** [quiet-palmier-6ac827.netlify.app](https://quiet-palmier-6ac827.netlify.app)
-
+> **Live demo:** https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/
 ---
 
 ## Features
@@ -55,7 +54,7 @@ Each scenario includes:
 ## Getting Started
 
 ### Option 1 - Use the live version
-No setup needed. Open [quiet-palmier-6ac827.netlify.app](https://quiet-palmier-6ac827.netlify.app) in two browser windows or on two devices.
+No setup needed. Open https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/ in two browser windows or on two devices.
 
 ### Option 2 - Run locally
 Since it is a single HTML file with no build step:
