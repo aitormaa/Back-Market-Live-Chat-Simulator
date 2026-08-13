@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>BM Live Chat Training EN v5</title>
+<title>BM Live Chat Training EN v6 - Firebase</title>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>body{margin:0;font-family:system-ui,sans-serif}.automsg{background:#FEF3C7!important;border-left:3px solid #F59E0B;font-style:italic}.fp{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px}</style>
 </head>
 <body><div id="root"></div>
@@ -68,12 +71,87 @@ const SC=[
 ];
 const{useState,useEffect,useRef}=React;
 const PCFG={debug:0,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}};
-const BC=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('bm_en_v5'):null;
+const APP_LOCALE='en';
+const SESSION_ROOT='sessions/'+APP_LOCALE;
+const BC=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('bm_'+APP_LOCALE+'_v6'):null;
+
+// Paste the Firebase Web App configuration here before deploying.
+// The config is safe to include in a static website. Database Rules protect the data.
+const firebaseConfig = {
+  apiKey: "AIzaSyCcuLaJualt_r-gYmEEz1X9vMUxeFjgQ0I",
+  authDomain: "back-market-live-chat-training.firebaseapp.com",
+  databaseURL: "https://back-market-live-chat-training-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "back-market-live-chat-training",
+  storageBucket: "back-market-live-chat-training.firebasestorage.app",
+  messagingSenderId: "125620524340",
+  appId: "1:125620524340:web:31004b905b1747cbf58161"
+};
+const FIREBASE_CONFIGURED=!Object.values(FIREBASE_CONFIG).some(v=>String(v).includes('PASTE_'));
+let FB_DB=null;
+let FB_READY=Promise.resolve();
+if(FIREBASE_CONFIGURED){
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    FB_DB=firebase.database();
+    FB_READY=firebase.auth().signInAnonymously().catch(err=>{
+      console.error('Firebase anonymous sign-in failed:',err);
+      throw err;
+    });
+  }catch(err){
+    console.error('Firebase initialization failed:',err);
+    FB_DB=null;
+  }
+}else{
+  console.warn('Firebase is not configured. Local-only mode is active.');
+}
+
 const DB={
-  get:c=>{try{return JSON.parse(localStorage.getItem('bm5en_'+c)||'null');}catch{return null;}},
-  set:(c,d)=>{try{localStorage.setItem('bm5en_'+c,JSON.stringify(d));}catch{}},
-  addMsg:(c,id,m)=>{const s=DB.get(c);if(!s)return;if(!s.messages)s.messages={};s.messages[id]=m;DB.set(c,s);BC?.postMessage({type:'u',c});},
-  close:c=>{const s=DB.get(c);if(!s)return;s.closed=true;DB.set(c,s);BC?.postMessage({type:'u',c});}
+  cache:{},
+  key:c=>'bm_'+APP_LOCALE+'_'+c,
+  ref:c=>FB_DB.ref(SESSION_ROOT+'/'+c),
+  localGet:c=>{try{return JSON.parse(localStorage.getItem(DB.key(c))||'null');}catch{return null;}},
+  localSet:(c,d)=>{try{localStorage.setItem(DB.key(c),JSON.stringify(d));}catch{}},
+  get:c=>DB.cache[c]||DB.localGet(c),
+  set:(c,d)=>{
+    DB.cache[c]=d;DB.localSet(c,d);BC?.postMessage({type:'u',c});
+    if(FB_DB)FB_READY.then(()=>DB.ref(c).set(d)).catch(err=>console.error('Firebase session write failed:',err));
+  },
+  load:async c=>{
+    if(FB_DB){
+      try{await FB_READY;const snap=await DB.ref(c).once('value');const value=snap.val();if(value)DB.cache[c]=value;return value;}
+      catch(err){console.error('Firebase session load failed:',err);}
+    }
+    return DB.get(c);
+  },
+  addMsg:async(c,id,m)=>{
+    let s=DB.get(c);
+    if(FB_DB){try{s=await DB.load(c);}catch{}}
+    if(!s)return;
+    const next={...s,messages:{...(s.messages||{}),[id]:m}};
+    DB.cache[c]=next;DB.localSet(c,next);BC?.postMessage({type:'u',c});
+    if(FB_DB)FB_READY.then(()=>DB.ref(c+'/messages/'+id).set(m)).catch(err=>console.error('Firebase message write failed:',err));
+  },
+  close:async c=>{
+    let s=DB.get(c);
+    if(FB_DB){try{s=await DB.load(c);}catch{}}
+    if(!s)return;
+    const next={...s,closed:true};DB.cache[c]=next;DB.localSet(c,next);BC?.postMessage({type:'u',c});
+    if(FB_DB)FB_READY.then(()=>DB.ref(c).update({closed:true})).catch(err=>console.error('Firebase close write failed:',err));
+  },
+  listen:(c,callback)=>{
+    if(!FB_DB)return()=>{};
+    let active=true,handler=null;
+    FB_READY.then(()=>{
+      if(!active)return;
+      const ref=DB.ref(c);
+      handler=snap=>{const value=snap.val();if(value)DB.cache[c]=value;callback();};
+      ref.on('value',handler);
+    }).catch(err=>console.error('Firebase listener failed:',err));
+    return()=>{
+      active=false;
+      if(handler)DB.ref(c).off('value',handler);
+    };
+  }
 };
 const genID=()=>Math.random().toString(36).slice(2,8).toUpperCase();
 const MACROS=[
@@ -119,19 +197,23 @@ function App(){
   useEffect(()=>{
     if(!code||!['chat','wait'].includes(view))return;
     const load=()=>{const ses=DB.get(code);if(!ses)return;const arr=Object.values(ses.messages||{}).sort((a,b)=>a.ts-b.ts);setMsgs(arr);const lc=arr.filter(m=>m.sender==='customer').at(-1);const la=arr.filter(m=>m.sender==='agent').at(-1);if(lc&&lc.ts!==lastCMT){setLastCMT(lc.ts);setNrt(0);}setNrtActive(!!lc&&(!la||lc.ts>la.ts));if(view==='wait'&&arr.length>0&&role==='agent')setView('chat');if(ses.closed&&!isClosed)setIsClosed(true);};
-    load();const bch=e=>{if(e.data.c===code)load();};BC?.addEventListener('message',bch);const poll=setInterval(load,400);
-    return()=>{BC?.removeEventListener('message',bch);clearInterval(poll);};
+    load();
+    const stopFirebase=DB.listen(code,load);
+    const bch=e=>{if(e.data.c===code)load();};
+    BC?.addEventListener('message',bch);
+    const poll=setInterval(load,1000);
+    return()=>{stopFirebase?.();BC?.removeEventListener('message',bch);clearInterval(poll);};
   },[code,view,role,lastCMT,isClosed]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:'smooth'});},[msgs]);
   const handleCreate=diff=>{const pool=SC.filter(s=>s.diff===diff);if(!pool.length)return;const sc=pool[Math.floor(Math.random()*pool.length)];const nm=prompt('Your name (Agent):');if(!nm?.trim())return;setAgentName(nm.trim());const tryPeer=(pc,n=0)=>{DB.set(pc,{scenario:sc,messages:{},closed:false});if(n>2){setCode(pc);setScenario(sc);setView('wait');return;}const p=new Peer('bm5en-'+pc,PCFG);PR.current=p;p.on('open',()=>{setCode(pc);setScenario(sc);setView('wait');});p.on('connection',conn=>{CR.current=conn;conn.on('open',()=>{const ses=DB.get(pc);conn.send({type:'INIT',sc,ms:ses?.messages||{}});setView('chat');});conn.on('data',d=>onPData(d,pc));});p.on('error',err=>{if(err.type==='unavailable-id')tryPeer(genID(),n+1);else{setCode(pc);setScenario(sc);setView('wait');}});};tryPeer(genID());};
-  const handleJoin=()=>{if(inputCode.length!==6)return;const rc=inputCode.toUpperCase();const fbk=()=>{const ses=DB.get(rc);if(ses){setCode(rc);setScenario(ses.scenario);if(role==='agent'){const n=prompt('Your name:');if(!n)return;setAgentName(n);setView('wait');}else setView('chat');}else alert('Session not found! Ask the Agent for their code.');};const p=new Peer(PCFG);PR.current=p;p.on('open',()=>{const conn=p.connect('bm5en-'+rc,{reliable:true});CR.current=conn;let got=false;conn.on('data',d=>{onPData(d,rc);if(d.type==='INIT')got=true;});conn.on('open',()=>setTimeout(()=>{if(!got)fbk();},6000));conn.on('error',fbk);});p.on('error',fbk);};
+  const handleJoin=()=>{if(inputCode.length!==6)return;const rc=inputCode.toUpperCase();let fallbackUsed=false;const fbk=async()=>{if(fallbackUsed)return;fallbackUsed=true;const ses=await DB.load(rc);if(ses){setCode(rc);setScenario(ses.scenario);if(role==='agent'){const n=prompt('Your name:');if(!n)return;setAgentName(n);setView('wait');}else setView('chat');}else alert(FIREBASE_CONFIGURED?'Session not found or expired. Check the code and ask the Agent to create a new session.':'Firebase is not configured and the PeerJS connection failed. Configure Firebase before using sessions across devices.');};const p=new Peer(PCFG);PR.current=p;p.on('open',()=>{const conn=p.connect('bm5en-'+rc,{reliable:true});CR.current=conn;let got=false;conn.on('data',d=>{onPData(d,rc);if(d.type==='INIT')got=true;});conn.on('open',()=>setTimeout(()=>{if(!got)fbk();},6000));conn.on('error',fbk);});p.on('error',fbk);};
   const handleSend=()=>{if(!input.trim()||isClosed)return;let mac=null;for(const m of MACROS){if(m.text===input.trim()||simil(input.trim(),m.text)>=50){mac=m;break;}}if(mac&&!macrosUsed.includes(mac.id))setMacrosUsed(p=>[...p,mac.id]);let txt=input.trim();if(role==='agent')txt=txt.replace(/{CUSTOMER_FNAME}/g,scenario?.cust?.name?.split(' ')[0]||'there').replace(/{CURRENT_USER_FNAME}/g,agentName);bcast('m'+Date.now(),{sender:role,text:txt,ts:Date.now(),messageType:mt});setInput('');setLastAct(Date.now());if(role==='agent'&&!frtDone)setFrtDone(true);if(role==='agent'){setNrtActive(false);setNrt(0);}if(mac&&(mac.id==='M6'||mac.id==='M7')){DB.close(RC.current);CR.current?.open&&CR.current.send({type:'CLOSE'});}};
   const handleFile=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>5*1024*1024){alert('Max 5MB.');if(fileRef.current)fileRef.current.value='';return;}if(fileRef.current)fileRef.current.value='';setUploading(true);try{const data=await compressImg(f);if(!data){setUploading(false);alert('Could not process file.');return;}bcast('m'+Date.now(),{sender:role,text:'📎 '+f.name,fileUrl:data,fileName:f.name,fileType:f.type,ts:Date.now(),messageType:mt});setLastAct(Date.now());}catch{alert('Upload failed.');}setUploading(false);};
   const calcQA=()=>{const frtSc=frtDone?(frt>50?25:frt>40?20:frt>30?15:frt>0?10:5):0;const nrtSc=nrt<=60?20:nrt<=120?15:nrt<=180?10:5;let macSc=0;if(macrosUsed.includes('M1'))macSc+=10;if(macrosUsed.includes('M6')||macrosUsed.includes('M7'))macSc+=10;if(macrosUsed.includes('M5'))macSc+=3;macSc+=Math.min(macrosUsed.filter(m=>['M2','M3','M4','M8'].includes(m)).length*2,6);macSc=Math.min(macSc,29);const empSc=calcEmpathy(msgs,scenario);let tickSc=0;if(ticketDone){const ref={Beginner:{st:'resolved',pr:'normal'},Intermediate:{st:'pending',pr:'high'},Advanced:{st:'open',pr:'urgent'}}[scenario?.diff]||{};if(ticketStatus===ref.st)tickSc+=5;else if(ticketStatus)tickSc+=2;if(ticketPriority===ref.pr)tickSc+=3;else if(ticketPriority)tickSc+=1;if(ticketCategory)tickSc+=2;}return{frtSc,nrtSc,macSc,empSc,tickSc,total:frtSc+nrtSc+macSc+empSc+tickSc};};
   const reset=()=>{PR.current?.destroy();PR.current=null;CR.current=null;setView('home');setRole(null);setCode('');setScenario(null);setMsgs([]);setInput('');setMt('REPLY');setAgentName('');setTime(0);setFrt(60);setFrtDone(false);setNrt(0);setNrtActive(false);setLastCMT(0);setMacrosUsed([]);setShowQA(false);setIsClosed(false);setTicketStatus('');setTicketPriority('');setTicketCategory('');setTicketDone(false);setLastAct(Date.now());};
   const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const bCnt=SC.filter(s=>s.diff==='Beginner').length,iCnt=SC.filter(s=>s.diff==='Intermediate').length,aCnt=SC.filter(s=>s.diff==='Advanced').length;
-  if(view==='home')return(<div className="min-h-screen bg-gradient-to-br from-purple-700 to-blue-600 flex items-center justify-center p-4"><div className="max-w-3xl w-full bg-white rounded-3xl shadow-2xl p-10"><h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-purple-700 to-blue-600 bg-clip-text text-transparent">🎓 BM Live Chat Training</h1><p className="text-center text-gray-400 text-sm mb-8">🌐 P2P · {bCnt} Beginner · {iCnt} Intermediate · {aCnt} Advanced · EN v5</p><div className="grid md:grid-cols-2 gap-6"><div onClick={()=>{setRole('agent');setView('join');}} className="cursor-pointer bg-gradient-to-br from-green-500 to-emerald-700 p-10 rounded-2xl text-white text-center hover:scale-105 transition-transform shadow-lg"><div className="text-5xl mb-2">🎧</div><h3 className="text-2xl font-bold">Agent</h3><p className="opacity-75 text-sm mt-1">FRT · NRT · Macros · QA · Ticket</p></div><div onClick={()=>{setRole('customer');setView('join');}} className="cursor-pointer bg-gradient-to-br from-purple-500 to-purple-800 p-10 rounded-2xl text-white text-center hover:scale-105 transition-transform shadow-lg"><div className="text-5xl mb-2">💬</div><h3 className="text-2xl font-bold">Customer</h3><p className="opacity-75 text-sm mt-1">Realistic scenario roleplay</p></div></div></div></div>);
+  if(view==='home')return(<div className="min-h-screen bg-gradient-to-br from-purple-700 to-blue-600 flex items-center justify-center p-4"><div className="max-w-3xl w-full bg-white rounded-3xl shadow-2xl p-10"><h1 className="text-4xl font-bold text-center mb-2 bg-gradient-to-r from-purple-700 to-blue-600 bg-clip-text text-transparent">🎓 BM Live Chat Training</h1><p className="text-center text-gray-400 text-sm mb-8">🌐 P2P · {bCnt} Beginner · {iCnt} Intermediate · {aCnt} Advanced · EN v6 - Firebase</p><div className="grid md:grid-cols-2 gap-6"><div onClick={()=>{setRole('agent');setView('join');}} className="cursor-pointer bg-gradient-to-br from-green-500 to-emerald-700 p-10 rounded-2xl text-white text-center hover:scale-105 transition-transform shadow-lg"><div className="text-5xl mb-2">🎧</div><h3 className="text-2xl font-bold">Agent</h3><p className="opacity-75 text-sm mt-1">FRT · NRT · Macros · QA · Ticket</p></div><div onClick={()=>{setRole('customer');setView('join');}} className="cursor-pointer bg-gradient-to-br from-purple-500 to-purple-800 p-10 rounded-2xl text-white text-center hover:scale-105 transition-transform shadow-lg"><div className="text-5xl mb-2">💬</div><h3 className="text-2xl font-bold">Customer</h3><p className="opacity-75 text-sm mt-1">Realistic scenario roleplay</p></div></div></div></div>);
   if(view==='join')return(<div className="min-h-screen bg-gradient-to-br from-purple-700 to-blue-600 flex items-center justify-center p-4"><div className="max-w-2xl w-full"><button onClick={()=>setView('home')} className="mb-4 px-4 py-2 bg-white rounded-xl text-sm shadow">← Back</button><div className="bg-white rounded-3xl shadow-2xl p-8"><h2 className="text-2xl font-bold text-center mb-2">Join or Create Session</h2><p className="text-center mb-6"><span className="px-4 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">{role==='agent'?'🎧 Agent':'💬 Customer'}</span></p><div className="bg-green-50 border-4 border-green-300 rounded-2xl p-5 mb-5"><h3 className="font-bold mb-3">Join with code</h3><div className="flex gap-3"><input value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&inputCode.length===6&&handleJoin()} placeholder="XXXXXX" maxLength={6} className="flex-1 px-4 py-3 border-4 rounded-xl text-center text-xl font-mono font-bold uppercase tracking-widest"/><button onClick={handleJoin} disabled={inputCode.length!==6} className="px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-40">Join</button></div></div>{role==='agent'&&(<><p className="text-center font-bold text-gray-400 my-4">— OR CREATE NEW SESSION —</p><div className="grid grid-cols-3 gap-3"><button onClick={()=>handleCreate('Beginner')} className="py-5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold">🟢 Beginner</button><button onClick={()=>handleCreate('Intermediate')} className="py-5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold">🟡 Intermediate</button><button onClick={()=>handleCreate('Advanced')} className="py-5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold">🔴 Advanced</button></div></>)}{role==='customer'&&<p className="text-center text-sm text-gray-500 mt-4">💡 Get the 6-letter code from your Agent. Works across devices!</p>}</div></div></div>);
   if(view==='wait')return(<div className="min-h-screen bg-gradient-to-br from-purple-700 to-blue-600 flex items-center justify-center p-4"><div className="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full text-center"><h2 className="text-2xl font-bold mb-4">⏳ Waiting for Customer</h2><div className="bg-green-50 border-4 border-green-500 rounded-2xl p-6 mb-4"><p className="text-sm font-semibold mb-3">Share this code:</p><div className="flex items-center justify-center gap-3"><div className="bg-white px-8 py-5 rounded-xl border-4 border-green-600 shadow"><p className="text-5xl font-bold font-mono text-green-700 tracking-widest">{code}</p></div><button onClick={()=>{navigator.clipboard.writeText(code);setCopied(true);setTimeout(()=>setCopied(false),2000);}} className="w-14 h-14 border-4 rounded-xl text-xl hover:bg-gray-50">{copied?'✓':'📋'}</button></div></div><p className="text-purple-600 font-semibold animate-pulse text-sm">Connecting via P2P…</p><button onClick={reset} className="mt-4 px-5 py-2 bg-gray-200 rounded-xl text-sm hover:bg-gray-300">Cancel</button></div></div>);
   if(!scenario)return null;
