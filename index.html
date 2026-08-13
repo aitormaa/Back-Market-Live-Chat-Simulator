@@ -78,13 +78,13 @@ const BC=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('bm_'+APP_LO
 // Paste the Firebase Web App configuration here before deploying.
 // The config is safe to include in a static website. Database Rules protect the data.
 const FIREBASE_CONFIG={
-  apiKey: "AIzaSyCcuLaJualt_r-gYmEEz1X9vMUxeFjgQ0I",
-  authDomain: "back-market-live-chat-training.firebaseapp.com",
-  databaseURL: "https://back-market-live-chat-training-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "back-market-live-chat-training",
-  storageBucket: "back-market-live-chat-training.firebasestorage.app",
-  messagingSenderId: "125620524340",
-  appId: "1:125620524340:web:31004b905b1747cbf58161"
+  apiKey: "AIzaSyCcuLaJualt_r-gYmEEz1X9vMUxeFjgQ0I",
+  authDomain: "back-market-live-chat-training.firebaseapp.com",
+  databaseURL: "https://back-market-live-chat-training-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "back-market-live-chat-training",
+  storageBucket: "back-market-live-chat-training.firebasestorage.app",
+  messagingSenderId: "125620524340",
+  appId: "1:125620524340:web:31004b905b1747cbf58161"
 };
 const FIREBASE_CONFIGURED=!Object.values(FIREBASE_CONFIG).some(v=>String(v).includes('PASTE_'));
 let FB_DB=null;
@@ -125,7 +125,7 @@ const DB={
   },
   addMsg:async(c,id,m)=>{
     let s=DB.get(c);
-    if(FB_DB){try{s=await DB.load(c);}catch{}}
+    if(FB_DB&&!s){try{s=await DB.load(c);}catch{}}
     if(!s)return;
     const next={...s,messages:{...(s.messages||{}),[id]:m}};
     DB.cache[c]=next;DB.localSet(c,next);BC?.postMessage({type:'u',c});
@@ -133,7 +133,7 @@ const DB={
   },
   close:async c=>{
     let s=DB.get(c);
-    if(FB_DB){try{s=await DB.load(c);}catch{}}
+    if(FB_DB&&!s){try{s=await DB.load(c);}catch{}}
     if(!s)return;
     const next={...s,closed:true};DB.cache[c]=next;DB.localSet(c,next);BC?.postMessage({type:'u',c});
     if(FB_DB)FB_READY.then(()=>DB.ref(c).update({closed:true})).catch(err=>console.error('Firebase close write failed:',err));
@@ -201,12 +201,11 @@ function App(){
     const stopFirebase=DB.listen(code,load);
     const bch=e=>{if(e.data.c===code)load();};
     BC?.addEventListener('message',bch);
-    const poll=setInterval(load,1000);
-    return()=>{stopFirebase?.();BC?.removeEventListener('message',bch);clearInterval(poll);};
+    return()=>{stopFirebase?.();BC?.removeEventListener('message',bch);};
   },[code,view,role,lastCMT,isClosed]);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:'smooth'});},[msgs]);
   const handleCreate=diff=>{const pool=SC.filter(s=>s.diff===diff);if(!pool.length)return;const sc=pool[Math.floor(Math.random()*pool.length)];const nm=prompt('Your name (Agent):');if(!nm?.trim())return;setAgentName(nm.trim());const tryPeer=(pc,n=0)=>{DB.set(pc,{scenario:sc,messages:{},closed:false});if(n>2){setCode(pc);setScenario(sc);setView('wait');return;}const p=new Peer('bm5en-'+pc,PCFG);PR.current=p;p.on('open',()=>{setCode(pc);setScenario(sc);setView('wait');});p.on('connection',conn=>{CR.current=conn;conn.on('open',()=>{const ses=DB.get(pc);conn.send({type:'INIT',sc,ms:ses?.messages||{}});setView('chat');});conn.on('data',d=>onPData(d,pc));});p.on('error',err=>{if(err.type==='unavailable-id')tryPeer(genID(),n+1);else{setCode(pc);setScenario(sc);setView('wait');}});};tryPeer(genID());};
-  const handleJoin=()=>{if(inputCode.length!==6)return;const rc=inputCode.toUpperCase();let fallbackUsed=false;const fbk=async()=>{if(fallbackUsed)return;fallbackUsed=true;const ses=await DB.load(rc);if(ses){setCode(rc);setScenario(ses.scenario);if(role==='agent'){const n=prompt('Your name:');if(!n)return;setAgentName(n);setView('wait');}else setView('chat');}else alert('Session not found! Ask the Agent for their code.');};const p=new Peer(PCFG);PR.current=p;p.on('open',()=>{const conn=p.connect('bm5en-'+rc,{reliable:true});CR.current=conn;let got=false;conn.on('data',d=>{onPData(d,rc);if(d.type==='INIT')got=true;});conn.on('open',()=>setTimeout(()=>{if(!got)fbk();},6000));conn.on('error',fbk);});p.on('error',fbk);};
+  const handleJoin=()=>{if(inputCode.length!==6)return;const rc=inputCode.toUpperCase();let fallbackUsed=false;const fbk=async()=>{if(fallbackUsed)return;fallbackUsed=true;const ses=await DB.load(rc);if(ses){setCode(rc);setScenario(ses.scenario);if(role==='agent'){const n=prompt('Your name:');if(!n)return;setAgentName(n);setView('wait');}else setView('chat');}else alert('Session not found! Ask the Agent for their code.');};fbk();const p=new Peer(PCFG);PR.current=p;p.on('open',()=>{const conn=p.connect('bm5en-'+rc,{reliable:true});CR.current=conn;let got=false;conn.on('data',d=>{onPData(d,rc);if(d.type==='INIT')got=true;});conn.on('open',()=>{if(!got)fbk();});conn.on('error',fbk);});p.on('error',fbk);};
   const handleSend=()=>{if(!input.trim()||isClosed)return;let mac=null;for(const m of MACROS){if(m.text===input.trim()||simil(input.trim(),m.text)>=50){mac=m;break;}}if(mac&&!macrosUsed.includes(mac.id))setMacrosUsed(p=>[...p,mac.id]);let txt=input.trim();if(role==='agent')txt=txt.replace(/{CUSTOMER_FNAME}/g,scenario?.cust?.name?.split(' ')[0]||'there').replace(/{CURRENT_USER_FNAME}/g,agentName);bcast('m'+Date.now(),{sender:role,text:txt,ts:Date.now(),messageType:mt});setInput('');setLastAct(Date.now());if(role==='agent'&&!frtDone)setFrtDone(true);if(role==='agent'){setNrtActive(false);setNrt(0);}if(mac&&(mac.id==='M6'||mac.id==='M7')){DB.close(RC.current);CR.current?.open&&CR.current.send({type:'CLOSE'});}};
   const handleFile=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>5*1024*1024){alert('Max 5MB.');if(fileRef.current)fileRef.current.value='';return;}if(fileRef.current)fileRef.current.value='';setUploading(true);try{const data=await compressImg(f);if(!data){setUploading(false);alert('Could not process file.');return;}bcast('m'+Date.now(),{sender:role,text:'📎 '+f.name,fileUrl:data,fileName:f.name,fileType:f.type,ts:Date.now(),messageType:mt});setLastAct(Date.now());}catch{alert('Upload failed.');}setUploading(false);};
   const calcQA=()=>{const frtSc=frtDone?(frt>50?25:frt>40?20:frt>30?15:frt>0?10:5):0;const nrtSc=nrt<=60?20:nrt<=120?15:nrt<=180?10:5;let macSc=0;if(macrosUsed.includes('M1'))macSc+=10;if(macrosUsed.includes('M6')||macrosUsed.includes('M7'))macSc+=10;if(macrosUsed.includes('M5'))macSc+=3;macSc+=Math.min(macrosUsed.filter(m=>['M2','M3','M4','M8'].includes(m)).length*2,6);macSc=Math.min(macSc,29);const empSc=calcEmpathy(msgs,scenario);let tickSc=0;if(ticketDone){const ref={Beginner:{st:'resolved',pr:'normal'},Intermediate:{st:'pending',pr:'high'},Advanced:{st:'open',pr:'urgent'}}[scenario?.diff]||{};if(ticketStatus===ref.st)tickSc+=5;else if(ticketStatus)tickSc+=2;if(ticketPriority===ref.pr)tickSc+=3;else if(ticketPriority)tickSc+=1;if(ticketCategory)tickSc+=2;}return{frtSc,nrtSc,macSc,empSc,tickSc,total:frtSc+nrtSc+macSc+empSc+tickSc};};
