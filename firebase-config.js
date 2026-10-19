@@ -1,9 +1,0 @@
-window.BM_FIREBASE_CONFIG={
-  apiKey:'AIzaSyCcuLaJualt_r-gYmEEz1X9vMUxeFjgQ0I',
-  authDomain:'back-market-live-chat-training.firebaseapp.com',
-  databaseURL:'https://back-market-live-chat-training-default-rtdb.europe-west1.firebasedatabase.app',
-  projectId:'back-market-live-chat-training',
-  storageBucket:'back-market-live-chat-training.firebasestorage.app',
-  messagingSenderId:'125620524340',
-  appId:'1:125620524340:web:31004b905b1747cbf58161'
-};
