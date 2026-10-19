@@ -1,101 +1,178 @@
-# Back Market - Live Chat Training Simulator
+Back Market - Live Chat Training Simulator
+An interactive browser-based training tool for Back Market customer service agents. Two users connect to the same live chat session. One user plays the Agent and the other plays the Customer.
+Live demo:
+https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/
+Features
+Two-user live sessions
 
-An interactive, browser-based training tool for Back Market customer service agents. Pairs two users in real time: one plays the **Agent**, one plays the **Customer**, to practice live chat handling across realistic support scenarios.
+    The Agent creates a six-character session code.
+    The Customer joins with that code.
+    Firebase Realtime Database synchronizes sessions and messages across devices.
+    Firebase Anonymous Authentication protects database access without requiring user accounts.
+    PeerJS WebRTC remains available as an optional fast connection method.
+    The app continues to work when WebRTC is blocked by a company network because Firebase handles synchronization.
 
-> **Live demo:** https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/
----
+52 training scenarios
+Level	Code range	Scenarios	Focus
+Beginner	B01-B11	11	Order tracking, invoices, cancellations, warranties, and return policy
+Intermediate	I01-I30	30	Device defects, warranty claims, refund disputes, and technical troubleshooting
+Advanced	A01-A11	11	Fraud accusations, GDPR issues, hostile customers, legal threats, and vulnerable users
+Each scenario includes a customer persona, device and order details, an opening message, a resolution path, customer hints, and key challenges.
+Performance timers
 
-## Features
+    FRT: First Response Time, with a 60-second target.
+    NRT: Next Response Time, with a 90-second target.
+    Session timer: total session duration.
 
-### Dual-User Multiplayer
-- Two participants connect via a shared **Session Code**
-- One user selects a difficulty and becomes the **Agent**
-- The other joins via code and becomes the **Customer**
-- Real-time sync via **PeerJS (WebRTC)** with localStorage + BroadcastChannel fallback
-- Works across two browser tabs on the same device or across two different devices
+Agent tools
 
-### 52 Training Scenarios - 3 Difficulty Levels
+    Reply and internal note modes.
+    Macro library for common responses.
+    File and image attachments with client-side image compression.
+    Ticket fields for status, priority, and category.
+    QA scoring and empathy analysis.
 
-| Level | Code range | Scenarios | Focus |
-|---|---|---|---|
-| Beginner | B01-B11 | 11 | Order tracking, invoices, cancellations, warranties, return policy |
-| Intermediate | I01-I30 | 30 | Device defects, warranty claims, refund disputes, technical troubleshooting |
-| Advanced | A01-A11 | 11 | Fraud accusations, GDPR violations, hostile customers, legal threats, vulnerable users |
+Getting started
+Use the live version
+Open the live demo in two browser windows or on two devices:
+https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/
+The Agent and Customer can use different devices and networks. Both users must use the same language version. The English version uses the sessions/en Firebase path.
+Run locally
+This is a browser application with no build step:
 
-Each scenario includes:
-- Customer **persona** (name, device, order details, mood)
-- Opening **customer message**
-- **Resolution path** guide (visible to Agent only)
-- **Hints** about customer behaviour
-- **Key challenges** to practice
-
-### Performance Timers
-- **FRT** - First Response Time (target: under 60s), auto-countdown from session start
-- **NRT** - Next Response Time (target: under 90s), resets on each customer message
-- **Session Timer** - total elapsed time
-
-### Automated Customer Behaviour
-- If the agent has not replied after **60 seconds**: automated queue message sent
-- If still no reply after **120 seconds**: chat auto-transferred to async
-
-### Agent Tools
-- **REPLY / NOTE** toggle (internal notes are not visible to the customer)
-- **Macro library** (8 pre-built responses: greeting, hold, escalation, close, recap note, etc.)
-- **File and image upload** with client-side image compression (max 600px, JPEG 65%)
-- Ticket fields: **Status**, **Priority**, **Category**
-
-### QA Scoring and Empathy Analysis
-- Automatic **Empathy Score** calculated from agent messages (keyword detection, use of customer name, frequency)
-- Manual **QA checklist** with weighted scoring
-- Full session **debrief report** at chat close
-
----
-
-## Getting Started
-
-### Option 1 - Use the live version
-No setup needed. Open https://aitormaa.github.io/Back-Market-Live-Chat-Simulator/ in two browser windows or on two devices.
-
-### Option 2 - Run locally
-Since it is a single HTML file with no build step:
-
-```bash
-git clone https://github.com/aitormaa/backmarket-chat-simulator.git
-cd backmarket-chat-simulator
-open index.html
-```
-
-> Note: Some browsers restrict localStorage and BroadcastChannel on `file://` URLs. Use a local server for best results:
-
-```bash
-npx serve .
-# or
+git clone https://github.com/aitormaa/Back-Market-Live-Chat-Simulator.git
+cd Back-Market-Live-Chat-Simulator
 python3 -m http.server 8080
-```
 
----
+Open this URL in your browser:
+http://localhost:8080
+Using a local server is more reliable than opening the file directly with the file:// protocol.
+Run a session
+Agent
 
-## How to Run a Session
+    Open the simulator.
+    Choose the Agent role.
+    Select a difficulty.
+    Enter the Agent name.
+    Share the generated six-character session code.
+    Wait for the Customer to join.
 
-### Agent (Trainer or Trainee)
-1. Open the simulator
-2. Choose a difficulty: **Beginner**, **Intermediate**, or **Advanced**
-3. Enter your name
-4. A **6-character Session Code** is generated - share it with your partner
-5. Wait for the customer to join, then the chat begins
+Customer
 
-### Customer (Role-Player)
-1. Open the simulator on another tab or device
-2. Click **"Join as Customer"**
-3. Enter the Session Code shared by the Agent
-4. The scenario loads automatically - start chatting
+    Open the simulator on another browser or device.
+    Choose the Customer role.
+    Enter the session code from the Agent.
+    Start the conversation.
 
----
+Repository files
 
-## File Structure
+Back-Market-Live-Chat-Simulator/
+├── index.html
+├── firebase-config.js
+└── README.md
 
-```
-backmarket-chat-simulator/
+The English repository uses index.html. The German, Spanish, and French repositories use their own translated index.html files. Each repository also contains its own copy of firebase-config.js.
+Firebase configuration
+The simulator loads its Firebase Web App configuration from:
+
+firebase-config.js
+
+The file must be in the same repository folder as index.html and must contain:
+
+window.BM_FIREBASE_CONFIG={
+  apiKey:'YOUR_API_KEY',
+  authDomain:'YOUR_PROJECT.firebaseapp.com',
+  databaseURL:'YOUR_DATABASE_URL',
+  projectId:'YOUR_PROJECT_ID',
+  storageBucket:'YOUR_STORAGE_BUCKET',
+  messagingSenderId:'YOUR_MESSAGING_SENDER_ID',
+  appId:'YOUR_APP_ID'
+};
+
+Firebase web configuration is included in browser applications. Database Rules and Anonymous Authentication protect access to the data.
+Required Firebase settings:
+
+    Anonymous Authentication enabled.
+    Realtime Database enabled.
+    GitHub Pages domain added to Firebase Authentication authorized domains.
+    Realtime Database rules published.
+
+English sessions use this path:
+
+Rules
+Sessions
+$locale
+$code
+.read
+auth != null
+.write
+auth != null
+.validate
+newData.hasChildren(['scenario', 'closed'])
+
+The other language repositories use sessions/de, sessions/es, and sessions/fr.
+Firebase database rules
+Publish these rules in Realtime Database:
+
+Rules
+Sessions
+$locale
+$code
+.read
+auth != null
+.write
+auth != null
+.validate
+newData.hasChildren(['scenario', 'closed'])
+
+Do not require messages in the validation rule. A new session starts with an empty messages object, which may not be stored as a child until the first message is sent.
+Technical architecture
+
+Agent browser                    Customer browser
+     |                                  |
+     |        Firebase Realtime        |
+     +------ Database and Auth --------+
+     |                                  |
+     +------ PeerJS WebRTC, optional ---+
+
+Firebase is the source of truth for sessions and messages. The browser stores a local cache to reduce repeated reads. PeerJS can provide a faster direct connection when the network allows it.
+Main application data
+The main data arrays are defined in index.html:
+Constant	Description
+SC	Training scenarios
+MACROS	Agent response macros
+AUTO	Automated inactivity messages
+PCFG	PeerJS connection settings
+Troubleshooting
+If the browser console says:
+
+Firebase is not configured. Local-only mode is active.
+
+Check that firebase-config.js is in the repository root and that index.html loads it with:
+
+<script src="./firebase-config.js"></script>
+
+If the console says:
+
+PERMISSION_DENIED
+
+Check that Anonymous Authentication is enabled and that the Realtime Database rules have been published.
+If the console says:
+
+WebRTC: ICE failed
+
+PeerJS could not create a direct connection. Firebase should still synchronize the session and messages.
+Roadmap
+
+    Combine the four language repositories into one multilingual repository.
+    Add an administrator dashboard with team analytics.
+    Add exportable PDF debrief reports.
+    Move large attachments to Firebase Storage instead of storing them in Realtime Database.
+
+Contributors
+Built by the Back Market Learning and Development and Customer Care teams.
+License
+Internal use only. Back Market proprietary tool. Not for public distribution.
 â””â”€â”€ index.html        # Entire application - self-contained, no dependencies to install
 ```
 
